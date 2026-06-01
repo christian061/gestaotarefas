@@ -69,10 +69,20 @@ export default function WhatsAppPage() {
       const headers: Record<string, string> = { "Content-Type": "application/json", apikey: config.apiKey };
 
       /* Try to connect and get QR */
-      const res = await fetch(`${base}/instance/connect/${config.instanceName}`, { headers });
-      const data = await res.json();
+      const url = `${base}/instance/connect/${config.instanceName}?v=${Date.now()}`;
+      let res = await fetch(url, { headers, cache: 'no-store' });
+      if (res.status === 304) {
+        // Força revalidação caso tenha retornado Not Modified por ETag
+        res = await fetch(`${url}&r=${Math.random()}`, {
+          headers: { ...headers, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+          cache: 'no-store',
+        });
+      }
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-      const qr = data.base64 || data.qrcode?.base64 || data.qr;
+      const qr = data.base64 || data.qrcode?.base64 || data.qr || data.qrCode?.base64 || data?.data?.qrcode;
       if (qr) {
         setQrBase64(qr);
         setQrStep("show");
@@ -91,10 +101,11 @@ export default function WhatsAppPage() {
     pollRef.current = setInterval(async () => {
       try {
         const base = config.apiUrl.replace(/\/$/, "");
-        const res = await fetch(`${base}/instance/connectionState/${config.instanceName}`, {
-          headers: { apikey: config.apiKey },
+        const res = await fetch(`${base}/instance/connectionState/${config.instanceName}?v=${Date.now()}`, {
+          headers: { apikey: config.apiKey, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+          cache: 'no-store',
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const state = data.instance?.state || data.state;
         if (state === "open" || state === "connected") {
           stopPolling();
@@ -114,9 +125,9 @@ export default function WhatsAppPage() {
     stopPolling();
     try {
       const base = config.apiUrl.replace(/\/$/, "");
-      await fetch(`${base}/instance/logout/${config.instanceName}`, {
+      await fetch(`${base}/instance/logout/${config.instanceName}?v=${Date.now()}`, {
         method: "DELETE",
-        headers: { apikey: config.apiKey },
+        headers: { apikey: config.apiKey, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
       });
     } catch { /* ignore */ }
     disconnect();

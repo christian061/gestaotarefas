@@ -25,8 +25,9 @@ import {
 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { invitesApi } from "@/lib/api";
+import { invitesApi, boardsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 interface InviteMemberModalProps {
   open: boolean;
@@ -43,6 +44,8 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
   const [token, setToken] = useState("");
   const [copied, setCopied] = useState(false);
   const [emailTo, setEmailTo] = useState("");
+  const [addingMember, setAddingMember] = useState(false);
+  const [addedMember, setAddedMember] = useState(false);
   const [whatsappTo, setWhatsappTo] = useState("");
   const [sentEmail, setSentEmail] = useState(false);
   const [sentWpp, setSentWpp] = useState(false);
@@ -51,14 +54,35 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
 
   useEffect(() => {
     if (open) {
-      setToken(generateInviteToken());
-      setEmailTo("");
-      setWhatsappTo("");
-      setSentEmail(false);
-      setSentWpp(false);
-      setCopied(false);
+      (async () => {
+        try {
+          if (activeBoard) {
+            const res = await fetch(`${API}/invites/create`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ boardId: activeBoard.id })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              setToken(data.token);
+            } else {
+              setToken(generateInviteToken());
+            }
+          } else {
+            setToken(generateInviteToken());
+          }
+        } catch {
+          setToken(generateInviteToken());
+        }
+        setEmailTo("");
+        setWhatsappTo("");
+        setSentEmail(false);
+        setSentWpp(false);
+        setCopied(false);
+      })();
     }
-  }, [open]);
+  }, [open, activeBoard]);
 
   const inviteLink = typeof window !== "undefined"
     ? `${window.location.origin}/invite/${token}`
@@ -71,6 +95,31 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
     await navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAddMember = async () => {
+    if (!emailTo.trim() || !activeBoard) return;
+    setAddingMember(true);
+    setAddedMember(false);
+    setEmailError(null);
+    try {
+      await boardsApi.addMember(activeBoard.id, emailTo.trim());
+      // Recarrega board e atualiza store
+      const fresh = await boardsApi.get(activeBoard.id);
+      useBoardStore.setState((state) => {
+        const boards = state.boards.map((b) => b.id === activeBoard.id ? {
+          ...b,
+          members: (fresh.members || []).map((m: any) => ({ id: m.user.id, name: m.user.name, email: m.user.email, avatar: m.user.avatar, role: m.role })),
+        } : b);
+        const active = boards.find((b) => b.id === activeBoard.id) || state.activeBoard;
+        return { boards, activeBoard: active } as any;
+      });
+      setAddedMember(true);
+    } catch (err: any) {
+      setEmailError(err?.message || "Falha ao adicionar membro. Verifique se o usuário já possui conta.");
+    } finally {
+      setAddingMember(false);
+    }
   };
 
   const handleWhatsApp = () => {
@@ -101,8 +150,25 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
     }
   };
 
-  const regenerate = () => {
-    setToken(generateInviteToken());
+  const regenerate = async () => {
+    try {
+      if (activeBoard) {
+        const res = await fetch(`${API}/invites/create`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardId: activeBoard.id, email: emailTo || undefined })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setToken(data.token);
+        } else {
+          setToken(generateInviteToken());
+        }
+      } else {
+        setToken(generateInviteToken());
+      }
+    } catch {
+      setToken(generateInviteToken());
+    }
     setSentEmail(false);
     setSentWpp(false);
     setCopied(false);
@@ -221,6 +287,18 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
               >
                 {sendingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : sentEmail ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                 {sendingEmail ? "Enviando..." : sentEmail ? "Enviado!" : "Enviar"}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleAddMember}
+                disabled={!emailTo.trim() || !activeBoard || addingMember}
+                className={cn("shrink-0 gap-2", addedMember && "border-green-500 text-green-600")}
+                title="Adicionar diretamente ao quadro"
+              >
+                {addingMember ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                {addingMember ? "Adicionando..." : addedMember ? "Adicionado" : "Adicionar ao quadro"}
               </Button>
             </div>
             {emailError && (
