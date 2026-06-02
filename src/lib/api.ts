@@ -82,6 +82,11 @@ export const boardsApi = {
       body: JSON.stringify({ email }),
     }),
 
+  removeMember: (boardId: string, userId: string) =>
+    request<{ removed: boolean }>(`/boards/${boardId}/members/${userId}`, {
+      method: 'DELETE',
+    }),
+
   // Columns
   addColumn: (boardId: string, data: { title: string; color: string; icon: string }) =>
     request<any>(`/boards/${boardId}/columns`, {

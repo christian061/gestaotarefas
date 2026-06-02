@@ -1,20 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Mail, UserPlus, CheckCircle2, Clock } from "lucide-react";
+import { Mail, UserPlus, CheckCircle2, Clock, Trash2 } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { InviteMemberModal } from "@/components/team/invite-member-modal";
+import { boardsApi } from "@/lib/api";
 
 export default function TeamPage() {
   const { columns, activeBoard } = useBoardStore();
   const allTasks = columns.flatMap((c) => c.tasks);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  // Refresh active board when Team page opens
+  useEffect(() => {
+    (async () => {
+      try {
+        if (activeBoard?.id && /^c[0-9a-z]{24}$/i.test(activeBoard.id)) {
+          const fresh = await boardsApi.get(activeBoard.id);
+          useBoardStore.setState((state) => {
+            const boards = state.boards.map((b) => b.id === activeBoard.id ? {
+              ...b,
+              members: (fresh.members || []).map((m: any) => ({ id: m.user.id, name: m.user.name, email: m.user.email, avatar: m.user.avatar, role: m.role })),
+            } : b);
+            const active = boards.find((b) => b.id === activeBoard.id) || state.activeBoard;
+            return { boards, activeBoard: active } as any;
+          });
+        }
+      } catch {}
+    })();
+  }, [activeBoard?.id]);
 
   // Collect unique users: board members + task assignees
   const userMap = new Map<string, { id: string; name: string; email: string; avatar?: string }>();
@@ -76,7 +96,7 @@ export default function TeamPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-semibold">{member.name}</p>
+                    <p className="font-semibold">{member.name || (member.email?.split("@")[0] || "Membro")}</p>
                     <p className="text-xs text-muted-foreground">{ROLE_BADGE[member.id] || "Membro"}</p>
                     <p className="text-xs text-muted-foreground">{member.email}</p>
                   </div>
@@ -108,10 +128,40 @@ export default function TeamPage() {
                   </div>
                 </div>
 
-                <Button variant="outline" size="sm" className="w-full mt-4 gap-2">
-                  <Mail className="h-3.5 w-3.5" />
-                  Enviar mensagem
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" size="sm" className="flex-1 gap-2">
+                    <Mail className="h-3.5 w-3.5" />
+                    Enviar mensagem
+                  </Button>
+                  {(activeBoard as any)?.members?.find((m: any) => m.id === (window as any)?.authUserId)?.role in { owner:1, admin:1 } && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1 text-red-600 border-red-200 hover:bg-red-500/10"
+                      onClick={async () => {
+                        if (!activeBoard?.id) return;
+                        if (!confirm(`Remover ${member.name || member.email}?`)) return;
+                        try {
+                          await boardsApi.removeMember(activeBoard.id, member.id);
+                          const fresh = await boardsApi.get(activeBoard.id);
+                          useBoardStore.setState((state) => {
+                            const boards = state.boards.map((b) => b.id === activeBoard.id ? {
+                              ...b,
+                              members: (fresh.members || []).map((m: any) => ({ id: m.user.id, name: m.user.name, email: m.user.email, avatar: m.user.avatar, role: m.role })),
+                            } : b);
+                            const active = boards.find((b) => b.id === activeBoard.id) || state.activeBoard;
+                            return { boards, activeBoard: active } as any;
+                          });
+                        } catch (e: any) {
+                          alert(e?.message || 'Falha ao remover membro');
+                        }
+                      }}
+                      title="Remover do quadro"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}

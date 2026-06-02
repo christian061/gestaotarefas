@@ -5,6 +5,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners }
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Check, X } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
+import { boardsApi } from "@/lib/api";
 import { Column } from "./column";
 import { TaskCard } from "./task-card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
-  const { columns, moveTask, reorderTask, addColumn, searchQuery, filterPriority, filterAssignee } = useBoardStore();
+  const { columns, moveTask, reorderTask, addColumn, searchQuery, filterPriority, filterAssignee, activeBoard } = useBoardStore();
 
   const filteredColumns = columns.map((col) => ({
     ...col,
@@ -36,6 +37,50 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
   const [newColName, setNewColName] = useState("");
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Lightweight polling to reduce cross-user delay until WebSocket is added
+  useEffect(() => {
+    let timer: any;
+    const isCuid = (id?: string) => !!id && /^c[0-9a-z]{24}$/i.test(id);
+    const tick = async () => {
+      try {
+        if (isCuid(activeBoard?.id)) {
+          const fresh = await boardsApi.get(activeBoard!.id);
+          // Replace columns for activeBoard in store
+          useBoardStore.setState((state) => {
+            const cols = (fresh.columns || []).map((c: any) => ({
+              id: c.id,
+              title: c.title,
+              color: c.color,
+              icon: c.icon,
+              tasks: (c.tasks || []).map((t: any) => ({
+                id: t.id,
+                title: t.title,
+                description: t.description || undefined,
+                status: t.status,
+                priority: t.priority,
+                assignee: t.assignee ? { id: t.assignee.id, name: t.assignee.name, email: t.assignee.email, avatar: t.assignee.avatar } : undefined,
+                labels: (t.labels || []).map((l: any) => ({ id: l.id, name: l.name, color: l.color })),
+                checklist: t.checklist || [],
+                subtasks: t.subtasks || [],
+                comments: t.comments || [],
+                attachments: (t.attachments || []).map((a: any) => a.fileUrl || a) || [],
+                dueDate: t.dueDate || undefined,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                order: t.order ?? 0,
+              })),
+            }));
+            const bid = state.activeBoard?.id;
+            return bid === activeBoard!.id ? { columns: cols, boardColumns: { ...state.boardColumns, [activeBoard!.id]: cols } } as any : {} as any;
+          });
+        }
+      } catch {}
+      timer = setTimeout(tick, 3000);
+    };
+    timer = setTimeout(tick, 3000);
+    return () => { if (timer) clearTimeout(timer); };
+  }, [activeBoard?.id]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = columns.flatMap((c) => c.tasks).find((t) => t.id === event.active.id);

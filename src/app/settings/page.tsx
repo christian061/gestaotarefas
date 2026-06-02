@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,9 @@ import { User, Lock, Bell, Palette, Globe, Trash2, Save, Eye, EyeOff, CheckCircl
 import { useTheme } from "next-themes";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useAuthStore } from "@/stores/auth-store"; 
+import { authApi } from "@/lib/api";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 const SECTIONS = [
   { id: "profile", label: "Perfil", icon: User },
@@ -41,10 +44,43 @@ export default function SettingsPage() {
   const [pwdError, setPwdError]   = useState("");
   const [pwdSuccess, setPwdSuccess] = useState(false);
 
-  const handleSave = () => {
-    saveProfile();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  useEffect(() => {
+    (async () => {
+      try {
+        // Carrega perfil do backend (cookies já são enviados)
+        const res = await authApi.profile();
+        const u = (res as any)?.user || res;
+        updateProfile({
+          name: u?.name || profile.name || "",
+          email: u?.email || profile.email || "",
+          phone: u?.phone || profile.phone || "",
+          role: profile.role || "",
+        });
+      } catch {
+        // fallback: usa dados do auth store
+        if (user) updateProfile({ name: user.name || "", email: user.email || "" });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      // Persiste nome e telefone no backend
+      await fetch(`${API}/users/me`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: profile.name, phone: profile.phone })
+      });
+      saveProfile();
+      // Atualiza auth store localmente
+      if (user) useAuthStore.setState({ user: { ...user, name: profile.name, phone: profile.phone } as any });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // Silencia erro simples; opcional: exibir toast
+    }
   };
 
   const handleUpdatePassword = () => {
