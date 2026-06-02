@@ -6,14 +6,14 @@ import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { authApi } from "@/lib/api";
+import { boardsApi } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 export default function InviteAcceptPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const [state, setState] = useState<{ loading: boolean; valid?: boolean; email?: string | null; error?: string; accepted?: boolean }>({ loading: true });
+  const [state, setState] = useState<{ loading: boolean; valid?: boolean; email?: string | null; error?: string; accepted?: boolean; boardId?: string }>({ loading: true });
 
   useEffect(() => {
     (async () => {
@@ -23,7 +23,7 @@ export default function InviteAcceptPage() {
         if (!data.valid) {
           setState({ loading: false, valid: false, error: 'Convite inválido ou expirado.' });
         } else {
-          setState({ loading: false, valid: true, email: data.email || null });
+          setState({ loading: false, valid: true, email: data.email || null, boardId: data.boardId });
         }
       } catch (e: any) {
         setState({ loading: false, valid: false, error: e.message || 'Erro ao validar convite' });
@@ -34,9 +34,17 @@ export default function InviteAcceptPage() {
   const accept = async () => {
     try {
       const res = await fetch(`${API}/invites/${token}/accept`, { method: 'POST', credentials: 'include' });
-      if (!res.ok) throw new Error('Falha ao aceitar convite');
+      if (res.status === 401) {
+        setState((s) => ({ ...s, error: 'Você precisa fazer login para aceitar o convite.' }));
+        return;
+      }
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || 'Falha ao aceitar convite');
+      }
       setState((s) => ({ ...s, accepted: true }));
-      router.push('/boards');
+      try { await boardsApi.list(); } catch {}
+      router.push('/');
     } catch (e: any) {
       setState((s) => ({ ...s, error: e.message || 'Erro ao aceitar convite' }));
     }
@@ -70,8 +78,13 @@ export default function InviteAcceptPage() {
               <div className="rounded-md bg-green-500/10 border border-green-500/20 p-3 text-sm flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
                 <div>
-                  <p className="font-medium text-green-600">Convite aceito!</p>
+                  <p className="font-medium text-green-600">Convite aceito! Redirecionando para o app...</p>
                 </div>
+              </div>
+            )}
+            {state.error && !state.loading && (
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 text-sm">
+                {state.error}
               </div>
             )}
           </CardContent>
