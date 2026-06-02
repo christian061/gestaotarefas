@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Check, X } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { boardsApi } from "@/lib/api";
+import { useBoardRealtime } from "@/hooks/use-board-realtime";
 import { Column } from "./column";
 import { TaskCard } from "./task-card";
 import { Button } from "@/components/ui/button";
@@ -78,9 +79,15 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
       } catch {}
       timer = setTimeout(tick, 3000);
     };
-    timer = setTimeout(tick, 3000);
+    // Start polling only if realtime is not connected
+    if (!(useBoardStore.getState() as any).realtimeConnected) {
+      timer = setTimeout(tick, 3000);
+    }
     return () => { if (timer) clearTimeout(timer); };
   }, [activeBoard?.id]);
+
+  // Realtime sync
+  useBoardRealtime(activeBoard?.id);
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = columns.flatMap((c) => c.tasks).find((t) => t.id === event.active.id);
