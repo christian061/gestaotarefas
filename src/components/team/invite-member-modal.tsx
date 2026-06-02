@@ -91,6 +91,10 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
   const boardName = activeBoard?.title || "TaskFlow";
   const message = `Você foi convidado para colaborar no quadro "${boardName}"! Acesse pelo link: ${inviteLink}`;
 
+  const isCuid = (id?: string) => !!id && /^c[0-9a-z]{24}$/i.test(id);
+  const myRole = (activeBoard?.members || []).find((m: any) => m.id === user?.id)?.role || null;
+  const canDirectAdd = !!activeBoard && isCuid(activeBoard.id) && (!!myRole ? ["owner","admin"].includes(myRole) : true);
+
   const handleCopy = async () => {
     await navigator.clipboard.writeText(inviteLink);
     setCopied(true);
@@ -293,7 +297,7 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
               <Button
                 variant="outline"
                 onClick={handleAddMember}
-                disabled={!emailTo.trim() || !activeBoard || addingMember}
+                disabled={!emailTo.trim() || !activeBoard || addingMember || !canDirectAdd}
                 className={cn("shrink-0 gap-2", addedMember && "border-green-500 text-green-600")}
                 title="Adicionar diretamente ao quadro"
               >
@@ -301,6 +305,12 @@ export function InviteMemberModal({ open, onClose }: InviteMemberModalProps) {
                 {addingMember ? "Adicionando..." : addedMember ? "Adicionado" : "Adicionar ao quadro"}
               </Button>
             </div>
+            {!isCuid(activeBoard?.id) && (
+              <p className="text-[11px] text-amber-500">Abra um quadro real (id iniciando com "c...") para adicionar membros.</p>
+            )}
+            {isCuid(activeBoard?.id) && myRole && !["owner","admin"].includes(myRole) && (
+              <p className="text-[11px] text-amber-500">Somente o dono/admin pode adicionar membros neste quadro.</p>
+            )}
             {emailError && (
               <p className="text-[11px] text-red-500">{emailError}</p>
             )}

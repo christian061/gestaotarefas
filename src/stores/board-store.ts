@@ -7,6 +7,7 @@ import type { Task, Column, Board, TaskStatus, Priority, User, Label } from "@/t
 const LOCAL_BOARD_IDS = new Set(["board-default"]);
 const LOCAL_COL_IDS = new Set(["todo", "in_progress", "review", "done"]);
 const isApiId = (id: string) => !LOCAL_BOARD_IDS.has(id) && !LOCAL_COL_IDS.has(id) && !id.startsWith("col-local-");
+const isCuid = (id: string) => /^c[0-9a-z]{24}$/i.test(id);
 
 function apiTask(task: Partial<Task>) {
   return {
@@ -241,7 +242,7 @@ export const useBoardStore = create<BoardState>()(persist((set, get) => ({
       const bid = state.activeBoard?.id;
       return { columns: newColumns, boardColumns: bid ? { ...state.boardColumns, [bid]: newColumns } : state.boardColumns };
     });
-    if (isApiId(taskId) && isApiId(toColumn)) tasksApi.move(taskId, toColumn, newIndex).catch(console.warn);
+    if (isCuid(taskId) && isApiId(toColumn)) tasksApi.move(taskId, toColumn, newIndex).catch(console.warn);
   },
 
   addTask: (columnId, task) => {
@@ -290,7 +291,7 @@ export const useBoardStore = create<BoardState>()(persist((set, get) => ({
         selectedTask: state.selectedTask?.id === taskId ? updatedTask || null : state.selectedTask,
       };
     });
-    if (isApiId(taskId)) tasksApi.update(taskId, apiTask(updates as Partial<Task>)).catch(console.warn);
+    if (isCuid(taskId)) tasksApi.update(taskId, apiTask(updates as Partial<Task>)).catch(console.warn);
   },
 
   deleteTask: (taskId, columnId) => {
@@ -304,7 +305,7 @@ export const useBoardStore = create<BoardState>()(persist((set, get) => ({
       const bid = state.activeBoard?.id;
       return { columns: newColumns, boardColumns: bid ? { ...state.boardColumns, [bid]: newColumns } : state.boardColumns, selectedTask: null, isTaskModalOpen: false };
     });
-    if (isApiId(taskId)) tasksApi.delete(taskId).catch(console.warn);
+    if (isCuid(taskId)) tasksApi.delete(taskId).catch(console.warn);
   },
 
   setSearchQuery: (query) => set({ searchQuery: query }),

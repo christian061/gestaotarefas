@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBoardStore, mockUsers } from "@/stores/board-store";
+import { useBoardStore } from "@/stores/board-store";
 import { useLabelsStore } from "@/stores/labels-store";
 import { ManageLabelsModal } from "@/components/kanban/manage-labels-modal";
 import type { Task, Priority, Label as LabelType } from "@/types";
@@ -34,7 +34,7 @@ interface AddTaskModalProps {
 }
 
 export function AddTaskModal({ open, onOpenChange, defaultColumnId }: AddTaskModalProps) {
-  const { addTask, columns } = useBoardStore();
+  const { addTask, columns, activeBoard } = useBoardStore();
   const { labels } = useLabelsStore();
   const firstColId = columns[0]?.id || "todo";
   const [title, setTitle] = useState("");
@@ -75,7 +75,7 @@ export function AddTaskModal({ open, onOpenChange, defaultColumnId }: AddTaskMod
     e.preventDefault();
     if (!title.trim()) return;
 
-    const assignee = mockUsers.find((u) => u.id === assigneeId);
+    const assignee = activeBoard?.members?.find((u: any) => u.id === assigneeId);
 
     const col = columns.find((c) => c.id === columnId);
     const newTask: Task = {
@@ -217,9 +217,9 @@ export function AddTaskModal({ open, onOpenChange, defaultColumnId }: AddTaskMod
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
-                  {mockUsers.map((u) => (
+                  {(activeBoard?.members || []).map((u: any) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.name}
+                      {u.name || u.email}
                     </SelectItem>
                   ))}
                 </SelectContent>

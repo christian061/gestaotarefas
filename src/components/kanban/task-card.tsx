@@ -107,10 +107,14 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             >
               <MoreHorizontal className="h-3 w-3" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleEdit}>Editar</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDuplicate}>Duplicar</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onClick={handleArchive}>Arquivar</DropdownMenuItem>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuItem onPointerUp={(e) => { e.stopPropagation(); handleEdit(); }}>Editar</DropdownMenuItem>
+              <DropdownMenuItem onPointerUp={(e) => { e.stopPropagation(); handleDuplicate(); }}>Duplicar</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onPointerUp={(e) => { e.stopPropagation(); handleArchive(); }}>Arquivar</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
