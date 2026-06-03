@@ -125,7 +125,20 @@ export const tasksApi = {
       body: JSON.stringify({ columnId, order }),
     }),
 
-  delete: (taskId: string) => request<void>(`/tasks/${taskId}`, { method: "DELETE" }),
+  delete: async (taskId: string) => {
+    const token = getToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/tasks/${taskId}`, { method: "DELETE", credentials: 'include', headers });
+    if (res.status === 404) {
+      return; // item não existe na API — trate como sucesso para limpar local
+    }
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(error.message || `HTTP ${res.status}`);
+    }
+    return;
+  },
 
   addComment: (taskId: string, content: string) =>
     request<any>(`/tasks/${taskId}/comments`, {
