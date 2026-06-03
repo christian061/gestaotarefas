@@ -233,7 +233,6 @@ export const useBoardStore = create<BoardState>()(persist((set, get) => ({
       if (taskIndex === -1) return state;
 
       const [task] = fromCol.tasks.splice(taskIndex, 1);
-      task.status = toColumn as any;
       task.updatedAt = new Date().toISOString();
       toCol.tasks.splice(newIndex, 0, task);
 
