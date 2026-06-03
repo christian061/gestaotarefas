@@ -26,7 +26,8 @@ export function useBoardRealtime(boardId?: string) {
 
     if (!socket) {
       const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace(/\/api$/, "");
-      socket = io(base + "/ws", {
+      socket = io(base, {
+        path: "/ws",
         withCredentials: true,
         transports: ["websocket"],
       });
