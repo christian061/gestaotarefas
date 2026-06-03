@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Clock, AlertTriangle, Paperclip, MessageSquare, CheckCircle2, Send, User, Calendar, Tag, Trash2, Edit2, Settings2 } from "lucide-react";
+import { X, Clock, AlertTriangle, Paperclip, MessageSquare, CheckCircle2, Send, User, Calendar, Tag, Trash2, Edit2, Settings2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,6 +31,7 @@ import { useBoardStore, mockUsers } from "@/stores/board-store";
 import { useLabelsStore } from "@/stores/labels-store";
 import { ManageLabelsModal } from "@/components/kanban/manage-labels-modal";
 import type { Task, Priority, TaskStatus } from "@/types";
+import { useToast } from "@/components/ui/use-toast";
 
 interface TaskDetailModalProps {
   task: Task;
@@ -49,18 +50,25 @@ const priorityConfig: Record<Priority, { color: string; icon: React.ElementType;
 export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalProps) {
   const { updateTask, deleteTask, columns } = useBoardStore();
   const { labels } = useLabelsStore();
+  const { toast } = useToast();
   const [newComment, setNewComment] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [editingDesc, setEditingDesc] = useState(false);
   const [editedDesc, setEditedDesc] = useState(task.description || "");
   const [manageLabels, setManageLabels] = useState(false);
+  const [newChecklistText, setNewChecklistText] = useState("");
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistText, setEditingChecklistText] = useState("");
 
   useEffect(() => {
     setEditedTitle(task.title);
     setEditedDesc(task.description || "");
     setIsEditing(false);
     setEditingDesc(false);
+    setNewChecklistText("");
+    setEditingChecklistId(null);
+    setEditingChecklistText("");
   }, [task.id]);
 
   const handleAddComment = () => {
@@ -81,6 +89,70 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
       c.id === checklistId ? { ...c, completed: !c.completed } : c
     );
     updateTask(task.id, { checklist: updatedChecklist });
+  };
+
+  const handleAddChecklistItem = () => {
+    const text = newChecklistText.trim();
+    if (!text) {
+      toast({ title: "Informe um texto", variant: "destructive" });
+      return;
+    }
+    const item = { id: `chk-${Date.now()}`, text, completed: false };
+    updateTask(task.id, { checklist: [...task.checklist, item] });
+    setNewChecklistText("");
+    toast({ title: "Item adicionado", description: text });
+  };
+
+  const handleEditChecklistStart = (id: string, text: string) => {
+    setEditingChecklistId(id);
+    setEditingChecklistText(text);
+  };
+
+  const handleSaveChecklistEdit = () => {
+    if (!editingChecklistId) {
+      toast({ title: "Nada para salvar", variant: "destructive" });
+      return;
+    }
+    const txt = editingChecklistText.trim();
+    if (!txt) {
+      toast({ title: "Informe um texto", variant: "destructive" });
+      return;
+    }
+    const updated = task.checklist.map((c) => (c.id === editingChecklistId ? { ...c, text: txt } : c));
+    updateTask(task.id, { checklist: updated });
+    setEditingChecklistId(null);
+    setEditingChecklistText("");
+    toast({ title: "Item atualizado" });
+  };
+
+  const handleDeleteChecklist = (id: string) => {
+    const updated = task.checklist.filter((c) => c.id !== id);
+    updateTask(task.id, { checklist: updated });
+    if (editingChecklistId === id) {
+      setEditingChecklistId(null);
+      setEditingChecklistText("");
+    }
+    toast({ title: "Item removido", variant: "destructive" });
+  };
+
+  const handleMoveChecklistUp = (id: string) => {
+    const idx = task.checklist.findIndex((c) => c.id === id);
+    if (idx <= 0) return;
+    const arr = [...task.checklist];
+    const [item] = arr.splice(idx, 1);
+    arr.splice(idx - 1, 0, item);
+    updateTask(task.id, { checklist: arr });
+    toast({ title: "Item movido" });
+  };
+
+  const handleMoveChecklistDown = (id: string) => {
+    const idx = task.checklist.findIndex((c) => c.id === id);
+    if (idx === -1 || idx >= task.checklist.length - 1) return;
+    const arr = [...task.checklist];
+    const [item] = arr.splice(idx, 1);
+    arr.splice(idx + 1, 0, item);
+    updateTask(task.id, { checklist: arr });
+    toast({ title: "Item movido" });
   };
 
   const handleToggleSubtask = (subtaskId: string) => {
@@ -109,12 +181,12 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl h-[90vh] max-h-[90vh] p-0 overflow-hidden [&>button]:hidden">
-        <div className="flex flex-col md:flex-row h-full">
+      <DialogContent className="w-[96vw] max-w-5xl h-[92vh] max-h-[92vh] p-0 overflow-hidden [&>button]:hidden">
+        <div className="flex flex-col md:flex-row h-full min-w-0">
           {/* Main Content */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             {/* Header */}
-            <DialogHeader className="p-6 pb-4 border-b border-border">
+            <DialogHeader className="p-4 md:p-6 pb-3 md:pb-4 border-b border-border">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   {isEditing ? (
@@ -131,7 +203,7 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
                   ) : (
                     <DialogTitle className="text-lg font-semibold pr-8">{task.title}</DialogTitle>
                   )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap min-w-0">
                     <Badge variant="outline" className={cn("text-xs h-6 px-2 gap-1.5", priority.color)}>
                       <PriorityIcon className="h-3 w-3" />
                       {priority.label}
@@ -146,6 +218,9 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
                         {label.name}
                       </Badge>
                     ))}
+                    <Badge variant="outline" className="text-xs h-6 px-2 gap-1.5">
+                      <CheckCircle2 className="h-3 w-3" /> {completedChecklist}/{totalChecklist}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -163,7 +238,7 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
             </DialogHeader>
 
             {/* Content */}
-            <ScrollArea className="flex-1 p-6">
+            <ScrollArea className="flex-1 p-4 md:p-6">
               <Tabs defaultValue="details" className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="details">Detalhes</TabsTrigger>
@@ -308,35 +383,81 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
 
                 <TabsContent value="checklist" className="space-y-4 mt-4">
                   {/* Checklist */}
-                  {task.checklist.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <Label className="text-sm font-medium flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Checklist ({completedChecklist}/{totalChecklist})
-                        </Label>
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className="text-sm font-medium flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Checklist ({completedChecklist}/{totalChecklist})
+                      </Label>
+                      {totalChecklist > 0 && (
                         <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-violet-500 rounded-full"
-                            style={{ width: `${(completedChecklist / totalChecklist) * 100}%` }}
+                            style={{ width: `${(completedChecklist / Math.max(totalChecklist, 1)) * 100}%` }}
                           />
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        {task.checklist.map((item) => (
-                          <div key={item.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-                            <Checkbox
-                              checked={item.completed}
-                              onCheckedChange={() => handleToggleChecklist(item.id)}
-                            />
-                            <span className={cn("text-sm", item.completed && "line-through text-muted-foreground")}>
-                              {item.text}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                      )}
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      {task.checklist.map((item) => (
+                        <div key={item.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+                          <Checkbox
+                            checked={item.completed}
+                            onCheckedChange={() => handleToggleChecklist(item.id)}
+                          />
+                          {editingChecklistId === item.id ? (
+                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                              <Input
+                                value={editingChecklistText}
+                                onChange={(e) => setEditingChecklistText(e.target.value)}
+                                className="h-8 text-sm"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); handleSaveChecklistEdit(); }
+                                  if (e.key === "Escape") { e.preventDefault(); setEditingChecklistId(null); setEditingChecklistText(""); }
+                                }}
+                              />
+                              <Button size="sm" variant="ghost" onClick={handleSaveChecklistEdit}>Salvar</Button>
+                              <Button size="sm" variant="ghost" onClick={() => { setEditingChecklistId(null); setEditingChecklistText(""); }}>Cancelar</Button>
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-between gap-3 min-w-0">
+                              <span className={cn("text-sm truncate", item.completed && "line-through text-muted-foreground")}>{item.text}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleMoveChecklistUp(item.id)}>
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleMoveChecklistDown(item.id)}>
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditChecklistStart(item.id, item.text)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteChecklist(item.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Add checklist item */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <Input
+                      placeholder="Novo item do checklist..."
+                      value={newChecklistText}
+                      onChange={(e) => setNewChecklistText(e.target.value)}
+                      className="h-9"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); handleAddChecklistItem(); }
+                        if (e.key === "Escape") { e.preventDefault(); setNewChecklistText(""); }
+                      }}
+                    />
+                    <Button size="sm" onClick={handleAddChecklistItem} disabled={!newChecklistText.trim()}>Adicionar</Button>
+                  </div>
 
                   {/* Subtasks */}
                   {task.subtasks.length > 0 && (
@@ -430,7 +551,7 @@ export function TaskDetailModal({ task, open, onOpenChange }: TaskDetailModalPro
           </div>
 
           {/* Sidebar */}
-          <div className="md:w-64 border-t md:border-t-0 md:border-l border-border bg-muted/30 p-4 space-y-4 overflow-y-auto shrink-0">
+          <div className="md:w-72 lg:w-80 border-t md:border-t-0 md:border-l border-border bg-muted/30 p-4 space-y-4 overflow-y-auto shrink-0">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-2 block">Status</Label>
               <Select

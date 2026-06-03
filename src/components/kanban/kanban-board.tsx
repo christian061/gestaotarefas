@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Check, X } from "lucide-react";
 import { useBoardStore } from "@/stores/board-store";
 import { boardsApi } from "@/lib/api";
-import { useBoardRealtime } from "@/hooks/use-board-realtime";
+import { useBoardRealtime, registerLocalMove } from "@/hooks/use-board-realtime";
 import { Column } from "./column";
 import { TaskCard } from "./task-card";
 import { Button } from "@/components/ui/button";
@@ -39,12 +39,20 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Lightweight polling to reduce cross-user delay until WebSocket is added
+  // Lightweight polling com pausa quando WS conectado ou após um move local
   useEffect(() => {
     let timer: any;
+    let pausedUntil = 0;
     const isCuid = (id?: string) => !!id && /^c[0-9a-z]{24}$/i.test(id);
     const tick = async () => {
       try {
+        const now = Date.now();
+        const realtimeConnected = (useBoardStore.getState() as any).realtimeConnected;
+        if (now < pausedUntil || realtimeConnected) {
+          // rearm próximo tick sem fazer requests
+          timer = setTimeout(tick, 3000);
+          return;
+        }
         if (isCuid(activeBoard?.id)) {
           const fresh = await boardsApi.get(activeBoard!.id);
           // Replace columns for activeBoard in store
@@ -83,6 +91,8 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
     if (!(useBoardStore.getState() as any).realtimeConnected) {
       timer = setTimeout(tick, 3000);
     }
+    // expose a small helper to pause from moves
+    (useBoardStore as any).__pausePolling = (ms: number) => { pausedUntil = Date.now() + ms; };
     return () => { if (timer) clearTimeout(timer); };
   }, [activeBoard?.id]);
 
@@ -108,9 +118,15 @@ export function KanbanBoard({ onTaskClick, onAddTask }: KanbanBoardProps) {
     const activeIndex = activeColumn.tasks.findIndex((t) => t.id === activeId);
     if (activeColumn.id === overColumn.id) {
       const overIndex = overColumn.tasks.findIndex((t) => t.id === overId);
-      if (overIndex !== -1 && overIndex !== activeIndex) reorderTask(activeColumn.id, activeIndex, overIndex);
+      if (overIndex !== -1 && overIndex !== activeIndex) {
+        registerLocalMove(activeId);
+        (useBoardStore as any).__pausePolling?.(2000);
+        reorderTask(activeColumn.id, activeIndex, overIndex);
+      }
     } else {
       const overIndex = overColumn.tasks.findIndex((t) => t.id === overId);
+      registerLocalMove(activeId);
+      (useBoardStore as any).__pausePolling?.(2000);
       moveTask(activeId, activeColumn.id, overColumn.id, overIndex === -1 ? overColumn.tasks.length : overIndex);
     }
   };

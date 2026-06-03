@@ -4,6 +4,18 @@ import { io, Socket } from "socket.io-client";
 import { useBoardStore } from "@/stores/board-store";
 
 let socket: Socket | null = null;
+// In-flight moves to avoid echo/rollback: taskIds recently moved locally
+const inFlightMoves = new Map<string, number>();
+
+export function registerLocalMove(taskId: string, ttlMs = 1500) {
+  const until = Date.now() + ttlMs;
+  inFlightMoves.set(taskId, until);
+  // cleanup later
+  setTimeout(() => {
+    const v = inFlightMoves.get(taskId);
+    if (v && v <= Date.now()) inFlightMoves.delete(taskId);
+  }, ttlMs + 50);
+}
 
 export function useBoardRealtime(boardId?: string) {
   const setState = useBoardStore.setState;
@@ -13,8 +25,8 @@ export function useBoardRealtime(boardId?: string) {
     if (!boardId || !/^c[0-9a-z]{24}$/i.test(boardId)) return;
 
     if (!socket) {
-      socket = io((process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace(/\/api$/, ""), {
-        path: "/ws",
+      const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace(/\/api$/, "");
+      socket = io(base + "/ws", {
         withCredentials: true,
         transports: ["websocket"],
       });
@@ -48,6 +60,9 @@ export function useBoardRealtime(boardId?: string) {
       });
     };
     const onMoved = (data: { taskId: string; fromColumnId: string; toColumnId: string; order: number }) => {
+      // Ignore echo for very recent local moves
+      const until = inFlightMoves.get(data.taskId);
+      if (until && until > Date.now()) return;
       setState((state: any) => {
         const from = state.columns.find((c: any) => c.id === data.fromColumnId);
         const to = state.columns.find((c: any) => c.id === data.toColumnId);
